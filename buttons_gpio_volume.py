@@ -32,8 +32,8 @@ GPIO_MISO = 23
 GPIO_MOSI = 24
 GPIO_CS = 25
 
-MCP3008_CHANNEL = 1
-MCP3008_VOLUME = 0
+MCP3008_STATION_CHANNEL = 1
+MCP3008_VOLUME_CHANNEL = 0
 
 #Volume Definitions
 VOLUME_MIN = 15
@@ -61,9 +61,9 @@ alarm_time = time.strptime("06.55.00", "%H.%M.%S")
 alarm_started = False
 
 class RotaryEncoder_channel(object):
-      def __init__(self, gpio_CLK, gpio_CS, gpio_MISO, gpio_MOSI, channel, tolerance = 7):
-          self.mcp = Adafruit_MCP3008.MCP3008(clk=gpio_CLK, cs=gpio_CS, miso=gpio_MISO, mosi=gpio_MOSI)
+      def __init__(self, mpc, channel, tolerance = 7):
           self.channel = channel
+          self.mcp = mcp
           
           self.tolerance = tolerance
           self.last_read = 0
@@ -86,37 +86,16 @@ class RotaryEncoder_channel(object):
              self.last_read = trim_pot
 
 
-def set_station(station_mcp):
-    temp_str1 = str(station_mcp)
+def set_station(station_mpc):
+    temp_str1 = str(station_mpc)
     temp_str2 = "mpc play "
     comp_str = temp_str2 + temp_str1
     os.system(comp_str)
 
-class RotaryEncoder_DAB(object):
-    def __init__(self, gpio_CLK, gpio_CS, gpio_MISO, gpio_MOSI, channel, tolerance=10):
-        self.mcp = Adafruit_MCP3008.MCP3008(clk=gpio_CLK, cs=gpio_CS, miso=gpio_MISO, mosi=gpio_MOSI)
-        self.channel = channel
-        
-        self.tolerance = tolerance
-        self.last_read = 0
-
-    def destroy(self):
-       print "kaka"
-
-    def read(self):
-        trim_pot_changed = False
-        trim_pot = self.mcp.read_adc(self.channel)
-        pot_adjust = abs(trim_pot-self.last_read)
-
-        if pot_adjust > self.tolerance:
-           trim_pot_changed = True
-
-        if trim_pot_changed:
-           os.system('\n')
 
 class RotaryEncoder_volume(object):
-    def __init__(self, gpio_CLK, gpio_CS, gpio_MISO, gpio_MOSI, channel, tolerance=5):
-       self.mcp = Adafruit_MCP3008.MCP3008(clk=gpio_CLK, cs=gpio_CS, miso=gpio_MISO, mosi=gpio_MOSI)
+    def __init__(self, mcp, channel, tolerance=5):
+       self.mcp = mpc
        self.volume = Volume()
        self.channel = channel
 
@@ -251,8 +230,9 @@ if __name__ == "__main__":
    os.system("sudo systemctl stop bt_speaker")
   
    #setup potentiometers
-   encoder_channel = RotaryEncoder_channel(GPIO_CLK, GPIO_CS, GPIO_MISO, GPIO_MOSI, MCP3008_CHANNEL)
-   encoder_volume = RotaryEncoder_volume(GPIO_CLK, GPIO_CS, GPIO_MISO, GPIO_MOSI, MCP3008_VOLUME)
+   mpc_device = Adafruit_MCP3008.MCP3008(clk=GPIO_CLK, cs=GPIO_CS, miso=GPIO_MISO, mosi=GPIO_MOSI)
+   encoder_channel = RotaryEncoder_channel(mpc_device, MCP3008_CHANNEL)
+   encoder_volume = RotaryEncoder_volume(mpc_device, MCP3008_VOLUME)
    signal.signal(signal.SIGINT, on_exit)
    os.system("amixer sset Master 60%")
    os.system("mplayer /home/pi/connect_sound.wav")
