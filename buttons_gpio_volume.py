@@ -61,7 +61,7 @@ alarm_time = time.strptime("06.55.00", "%H.%M.%S")
 alarm_started = False
 
 class RotaryEncoder_channel(object):
-      def __init__(self, mpc, channel, tolerance = 7):
+      def __init__(self, mcp, channel, tolerance = 7):
           self.channel = channel
           self.mcp = mcp
           
@@ -95,7 +95,7 @@ def set_station(station_mpc):
 
 class RotaryEncoder_volume(object):
     def __init__(self, mcp, channel, tolerance=5):
-       self.mcp = mpc
+       self.mcp = mcp
        self.volume = Volume()
        self.channel = channel
 
@@ -117,7 +117,7 @@ class RotaryEncoder_volume(object):
         if trim_pot_changed:
            set_volume = int(round(trim_pot / 10.24))
            self.volume.set_volume(set_volume)
-
+           print set_volume
            self.last_read = trim_pot
 
 
@@ -230,9 +230,9 @@ if __name__ == "__main__":
    os.system("sudo systemctl stop bt_speaker")
   
    #setup potentiometers
-   mpc_device = Adafruit_MCP3008.MCP3008(clk=GPIO_CLK, cs=GPIO_CS, miso=GPIO_MISO, mosi=GPIO_MOSI)
-   encoder_channel = RotaryEncoder_channel(mpc_device, MCP3008_CHANNEL)
-   encoder_volume = RotaryEncoder_volume(mpc_device, MCP3008_VOLUME)
+   mcp_device = Adafruit_MCP3008.MCP3008(clk=GPIO_CLK, cs=GPIO_CS, miso=GPIO_MISO, mosi=GPIO_MOSI)
+   encoder_channel = RotaryEncoder_channel(mcp=mcp_device, channel=MCP3008_STATION_CHANNEL)
+   encoder_volume = RotaryEncoder_volume(mcp=mcp_device, channel=MCP3008_VOLUME_CHANNEL)
    signal.signal(signal.SIGINT, on_exit)
    os.system("amixer sset Master 60%")
    os.system("mplayer /home/pi/connect_sound.wav")
