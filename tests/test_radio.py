@@ -116,3 +116,21 @@ def test_play_reports_failed_stream(radio, client):
     radio.load()
     client.status = lambda: {"state": "stop", "error": "Failed to open stream"}
     assert not radio.play(2)
+
+
+def test_playing_sees_stream_that_failed_after_play(radio, client):
+    radio.load()
+    assert radio.play(2)
+    client.status = lambda: {"state": "stop", "error": "Failed to open stream"}
+    assert not radio.playing()
+
+
+def test_playing_false_when_mpd_unreachable(radio, client):
+    radio.load()
+
+    def always_lost(host, port):
+        raise ConnectionRefusedError("MPD not running")
+
+    client.connect = always_lost
+    client.drop_next = True
+    assert not radio.playing()

@@ -36,14 +36,28 @@ class Radio:
         try:
             self._call("clearerror")
             self._call("play", index)
-            status = self._call("status")
         except self._command_errors as e:
             log.warning("cannot play station %d: %s", index + 1, e)
             return False
-        if status.get("state") != "play" or "error" in status:
-            log.warning("station %d not playing: %s", index + 1, status.get("error", status.get("state")))
+        if not self.playing():
             return False
         log.info("playing station %d", index + 1)
+        return True
+
+    def playing(self) -> bool:
+        """True if MPD is playing without error.
+
+        MPD opens a stream after ``play`` returns, so a stream that fails to
+        open, or drops later, shows up here rather than in ``play()``.
+        """
+        try:
+            status = self._call("status")
+        except self._command_errors as e:
+            log.warning("cannot read MPD status: %s", e)
+            return False
+        if status.get("state") != "play" or "error" in status:
+            log.warning("stream not playing: %s", status.get("error", status.get("state")))
+            return False
         return True
 
     def stop(self) -> None:

@@ -63,3 +63,42 @@ def test_connected_signal_reaches_callback(backend):
     backend._on_message(signal_msg("/org/bluez/hci0", "org.bluez.Adapter1", {"Powered": Variant("b", False)}))
     backend._on_message(signal_msg("/org/bluez/hci0/dev_AA", DEVICE, {"Connected": Variant("b", False)}))
     assert seen == [True, False]
+
+
+@pytest.fixture
+def service_backend(backend):
+    """A backend whose Get Trusted answers ``backend.trusted`` and that records Set calls."""
+    backend.trusted = False
+    backend.sets = []
+
+    async def fake_call(path, interface, member, signature="", body=()):
+        assert (interface, member, list(body)) == (PROPERTIES, "Get", [DEVICE, "Trusted"])
+        return [Variant("b", backend.trusted)]
+
+    async def fake_set(path, interface, prop, signature, value):
+        backend.sets.append((path, prop, value))
+
+    backend._call = fake_call
+    backend._set = fake_set
+    return backend
+
+
+def test_service_trusts_new_phone_while_window_open(service_backend):
+    # Just Works pairing never reaches the agent, so AuthorizeService must trust the phone.
+    service_backend.attach(on_connected=lambda c: None, may_pair=lambda: True)
+    asyncio.run(service_backend._authorize_service("/org/bluez/hci0/dev_AA"))
+    assert service_backend.sets == [("/org/bluez/hci0/dev_AA", "Trusted", True)]
+
+
+def test_service_rejects_untrusted_phone_when_window_closed(service_backend):
+    service_backend.attach(on_connected=lambda c: None, may_pair=lambda: False)
+    with pytest.raises(DBusError, match="device not trusted"):
+        asyncio.run(service_backend._authorize_service("/org/bluez/hci0/dev_AA"))
+    assert service_backend.sets == []
+
+
+def test_service_accepts_trusted_phone_when_window_closed(service_backend):
+    service_backend.trusted = True
+    service_backend.attach(on_connected=lambda c: None, may_pair=lambda: False)
+    asyncio.run(service_backend._authorize_service("/org/bluez/hci0/dev_AA"))
+    assert service_backend.sets == []

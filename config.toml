@@ -40,7 +40,7 @@ playlist = "stations"
 
 [network]
 wifi_connect_timeout_s = 30   # then try anyway
-play_retry_s = 5              # retry interval until a stream plays
+play_retry_s = 5              # how often a stopped or failed stream is restarted
 
 [bluetooth]
 name = "RetroPi"

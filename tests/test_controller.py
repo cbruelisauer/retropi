@@ -52,14 +52,20 @@ class FakeMixer:
 class FakeRadio:
     def __init__(self, calls):
         self.calls = calls
-        self.streams_up = True
+        self.streams_up = True  # whether a stream started now would play
+        self.is_playing = False
 
     def play(self, index):
         self.calls.append(("radio.play", index))
+        self.is_playing = self.streams_up
         return self.streams_up
+
+    def playing(self):
+        return self.is_playing
 
     def stop(self):
         self.calls.append(("radio.stop",))
+        self.is_playing = False
 
 
 class FakeBluetooth:
@@ -80,6 +86,7 @@ class FakeWifi:
     def __init__(self, calls):
         self.calls = calls
         self.is_connected = True
+        self.polls = 0
 
     def on(self):
         self.calls.append(("wifi.on",))
@@ -88,6 +95,7 @@ class FakeWifi:
         self.calls.append(("wifi.off",))
 
     def connected(self):
+        self.polls += 1
         return self.is_connected
 
 
@@ -187,8 +195,46 @@ def test_radio_waits_for_wifi_then_plays(ctl, calls, clock):
     ctl.step()
     assert ("radio.play", 3) not in calls
     ctl.wifi.is_connected = True
+    clock.advance(1)
     ctl.step()
     assert calls[-1] == ("radio.play", 3)
+
+
+def test_wifi_polled_once_a_second_while_waiting(ctl, calls, clock):
+    ctl.wifi.is_connected = False
+    switch(ctl, calls, Mode.RADIO)
+    for _ in range(200):  # 10 s of 50 ms loop iterations
+        clock.advance(0.05)
+        ctl.step()
+    assert 10 <= ctl.wifi.polls <= 11
+
+
+def test_stream_that_fails_after_play_is_restarted(ctl, calls, clock):
+    switch(ctl, calls, Mode.RADIO)
+    assert calls.count(("radio.play", 3)) == 1
+    ctl.radio.is_playing = False  # MPD failed to open the stream after play()
+    clock.advance(4)
+    ctl.step()
+    assert calls.count(("radio.play", 3)) == 1
+    clock.advance(1)
+    ctl.step()
+    assert calls.count(("radio.play", 3)) == 2
+
+
+def test_failed_station_change_is_retried(ctl, calls, clock):
+    switch(ctl, calls, Mode.RADIO)
+    ctl.radio.streams_up = False
+    ctl.station_knob.turn(7)
+    clock.advance(1)
+    ctl.step()
+    assert calls.count(("radio.play", 7)) == 1
+    ctl.radio.streams_up = True
+    clock.advance(5)
+    ctl.step()
+    assert calls.count(("radio.play", 7)) == 2
+    clock.advance(10)
+    ctl.step()
+    assert calls.count(("radio.play", 7)) == 2
 
 
 def test_radio_tries_after_timeout_and_retries(ctl, calls, clock):

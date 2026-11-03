@@ -219,8 +219,14 @@ class BluezBackend:
         from dbus_next import DBusError
 
         (trusted,) = await self._call(device, PROPERTIES, "Get", "ss", [DEVICE, "Trusted"])
-        if not (trusted.value or self._may_pair()):
+        if trusted.value:
+            return
+        if not self._may_pair():
             raise DBusError("org.bluez.Error.Rejected", "device not trusted")
+        # With NoInputNoOutput the kernel accepts Just Works pairing without
+        # asking the agent, so this is the first call a new phone makes.
+        await self._set(device, DEVICE, "Trusted", "b", True)
+        log.info("trusted %s", device)
 
     def _on_message(self, msg):
         from dbus_next import MessageType

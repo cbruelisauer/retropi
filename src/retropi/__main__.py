@@ -13,6 +13,7 @@ from .controls import Mode
 log = logging.getLogger("retropi")
 
 LOOP_S = 0.05
+WIFI_POLL_S = 1.0  # how often radio mode asks nmcli whether Wi-Fi is up
 
 
 class Controller:
@@ -49,8 +50,8 @@ class Controller:
         self.play_retry_s = play_retry_s
         self.clock = clock
         self.mode = None
-        self.pending_since = None  # when radio mode was entered, until a stream plays
-        self.next_try = 0.0
+        self.pending_since = None  # when radio mode was entered, until Wi-Fi is up or timed out
+        self.next_try = 0.0  # next Wi-Fi poll, or next check that the stream plays
         self.running = True
 
     def start(self, startup_volume_db: float, startup_sound: str, play_sound=sounds.play) -> None:
@@ -83,18 +84,23 @@ class Controller:
             if new is not Mode.STANDBY:
                 self.mixer.set_db(self.volume_knob.position())  # apply the knob now, not on its next move
 
-        if self.mode is Mode.RADIO and self.pending_since is not None and now >= self.next_try:
-            connected = self.wifi.connected()
-            if connected or now - self.pending_since > self.wifi_connect_timeout_s:
-                if not connected:
-                    log.info("Wi-Fi not connected after %.0f s, trying anyway", self.wifi_connect_timeout_s)
-                # position() also resets the knob's baseline, so the next
-                # changed() does not restart the stream that is playing.
-                if self.radio.play(self.station_knob.position()):
+        if self.mode is Mode.RADIO and now >= self.next_try:
+            if self.pending_since is not None:
+                connected = self.wifi.connected()
+                if connected or now - self.pending_since > self.wifi_connect_timeout_s:
+                    if not connected:
+                        log.info("Wi-Fi not connected after %.0f s, trying anyway", self.wifi_connect_timeout_s)
                     self.pending_since = None
+                    # position() also resets the knob's baseline, so the next
+                    # changed() does not restart the stream that is playing.
+                    self._play(self.station_knob.position(), now)
                 else:
-                    log.warning("no stream yet, retrying in %.0f s", self.play_retry_s)
-                    self.next_try = now + self.play_retry_s
+                    self.next_try = now + WIFI_POLL_S
+            elif self.radio.playing():
+                self.next_try = now + self.play_retry_s
+            else:
+                log.warning("no stream, retrying")
+                self._play(self.station_knob.position(), now)
 
         if self.mode is not None and self.mode is not Mode.STANDBY:
             v = self.volume_knob.changed()
@@ -104,9 +110,15 @@ class Controller:
         if self.mode is Mode.RADIO and self.pending_since is None:
             s = self.station_knob.changed()
             if s is not None:
-                self.radio.play(s)
+                self._play(s, now)
 
         self.bt.tick()
+
+    def _play(self, station: int, now: float) -> None:
+        # Checked again after play_retry_s, and restarted if it is not playing
+        # by then: MPD reports a stream that fails to open only after play().
+        self.radio.play(station)
+        self.next_try = now + self.play_retry_s
 
     def shutdown(self) -> None:
         log.info("shutting down")

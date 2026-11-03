@@ -121,7 +121,7 @@ To change stations, edit `stations.m3u` and re-run the install script. Positions
 
 The selector is debounced: a new position counts once its input has been the only active one for 100 ms (`selector_settle_ms`). Between positions the radio keeps its last mode.
 
-If Wi-Fi is not connected after `wifi_connect_timeout_s`, the radio tries anyway (Ethernet may be up) and retries every `play_retry_s` until a stream plays.
+If Wi-Fi is not connected after `wifi_connect_timeout_s`, the radio tries anyway (Ethernet may be up) and checks every `play_retry_s` that the stream plays, restarting it if it failed to open or dropped.
 
 `sudo systemctl stop retropi` sets the volume to 0, stops playback, powers Bluetooth off and turns Wi-Fi back on.
 
