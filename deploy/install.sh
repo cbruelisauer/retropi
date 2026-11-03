@@ -14,7 +14,7 @@ APP_DIR=/opt/retropi
 RADIO_USER=pi
 BOOT_CONFIG=/boot/firmware/config.txt
 PACKAGES=(
-    mpd mpc bluez bluez-alsa-utils alsa-utils
+    mpd mpc bluez bluez-alsa-utils alsa-utils rfkill
     python3-gpiozero python3-lgpio python3-alsaaudio python3-mpd python3-dbus-next python3-venv
 )
 SERVICES=(mpd bluetooth bluealsa bluealsa-aplay retropi)
@@ -104,6 +104,9 @@ step "8. Playlist"
 install_file "$REPO/stations.m3u" /var/lib/mpd/playlists/stations.m3u
 
 step "9. Services"
+# A fresh image soft-blocks Bluetooth, and BlueZ cannot power a blocked
+# adapter. systemd-rfkill keeps the unblock across reboots.
+rfkill unblock bluetooth
 systemctl daemon-reload
 systemctl enable "${SERVICES[@]}"
 if [[ $REBOOT -eq 0 ]]; then

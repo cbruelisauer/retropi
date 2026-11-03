@@ -76,7 +76,7 @@ The script:
 | 6. App | Installs the package into a venv in `/opt/retropi` and copies the sounds |
 | 7. Config | Copies `config.toml` to `/etc/retropi/` only if missing, so your settings survive updates |
 | 8. Playlist | Copies `stations.m3u` to MPD's playlist directory |
-| 9. Services | Enables and restarts `mpd`, `bluetooth`, `bluealsa`, `bluealsa-aplay`, `retropi` |
+| 9. Services | Unblocks Bluetooth (`rfkill`), then enables and restarts `mpd`, `bluetooth`, `bluealsa`, `bluealsa-aplay`, `retropi` |
 | 10. Self-check | Prints the sound cards, mixer controls, Bluetooth adapter, service states and whether `pi` may switch Wi-Fi |
 
 `sudo ./deploy/uninstall.sh` stops and removes the service and `/opt/retropi`, and keeps `/etc/retropi/`.
@@ -91,7 +91,7 @@ The script:
 | `bluealsa-a2dp-sink.conf` | `bluealsa.service` drop-in | BlueALSA runs as an A2DP sink only |
 | `bluealsa-aplay-dmix.conf` | `bluealsa-aplay.service` drop-in | Phone audio plays to the shared `dmix` |
 | `50-retropi-wifi.rules` | `/etc/polkit-1/rules.d/` | Lets group `netdev` run `nmcli radio wifi on/off` |
-| `retropi.service` | `/etc/systemd/system/` | Runs the radio as `pi` |
+| `retropi.service` | `/etc/systemd/system/` | Runs the radio as `pi`, with gpiozero on `lgpio` and a writable `/run/retropi` for it |
 
 ## Configuration
 
