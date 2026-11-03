@@ -53,10 +53,10 @@ current="$(cat "$BOOT_CONFIG")"
 wanted="$(awk -v b="$BEGIN" -v e="$END" '$0 == b {skip = 1; next} $0 == e {skip = 0; next} !skip' "$BOOT_CONFIG")
 $BEGIN
 [all]
-# HiFiBerry Amp2: onboard and HDMI audio off, DAC+ overlay on
+# HiFiBerry Amp+ (TAS5713): onboard and HDMI audio off, Amp overlay on
 dtparam=audio=off
 dtoverlay=vc4-kms-v3d,noaudio
-dtoverlay=hifiberry-dacplus
+dtoverlay=hifiberry-amp
 $END"
 if [[ "$current" != "$wanted" ]]; then
     [[ -e "$BOOT_CONFIG.retropi-orig" ]] || cp "$BOOT_CONFIG" "$BOOT_CONFIG.retropi-orig"
