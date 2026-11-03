@@ -25,7 +25,7 @@ def test_repo_config_loads():
     cfg = config.load(REPO_CONFIG)
     assert cfg.pins.radio == 13
     assert cfg.adc.station_channel == 1
-    assert cfg.audio.mixer == "Digital"
+    assert cfg.audio.mixer == "Master"
     assert cfg.network.play_retry_s == 5.0
     assert isinstance(cfg.network.play_retry_s, float)
     assert cfg.bluetooth.disable_wifi is True
@@ -69,7 +69,7 @@ def test_unknown_key(tmp_path):
 
 
 def test_volume_range_must_be_ordered(tmp_path):
-    path = repo_config_with(tmp_path, "volume_max_db = -10.0", "volume_max_db = -50.0")
+    path = repo_config_with(tmp_path, "volume_max_db = -38.0", "volume_max_db = -90.0")
     with pytest.raises(config.ConfigError, match="volume_min_db must be below"):
         config.load(path)
 

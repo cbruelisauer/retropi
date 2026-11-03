@@ -1,6 +1,6 @@
 # retropi
 
-This project turns an old radio into an internet radio that can also be a Bluetooth speaker. It runs on a Raspberry Pi 3B with a [HiFiBerry Amp2](https://www.hifiberry.com/shop/boards/hifiberry-amp2/). The radio's original controls are reused: the selector picks standby, internet radio or Bluetooth, and two potentiometers work as the station dial and the volume knob.
+This project turns an old radio into an internet radio that can also be a Bluetooth speaker. It runs on a Raspberry Pi 3B with a HiFiBerry Amp+. The radio's original controls are reused: the selector picks standby, internet radio or Bluetooth, and two potentiometers work as the station dial and the volume knob.
 
 A small Python 3 service (`retropi`) reads the controls and drives MPD, the sound card's mixer, BlueZ and NetworkManager. It runs as user `pi` under systemd.
 
@@ -8,7 +8,7 @@ A small Python 3 service (`retropi`) reads the controls and drives MPD, the soun
 
 - **Internet radio**: streams the stations in `stations.m3u` through MPD. The station dial is split into equal bands, one per station.
 - **Bluetooth speaker**: BlueALSA makes the Pi an A2DP sink. The Bluetooth adapter is powered only while the selector is on Bluetooth, so in every other position no phone can see or connect to the radio.
-- **Volume knob**: the knob's full travel maps linearly in dB onto a configurable range (-45 to -10 dB by default) on the card's hardware mixer. It works for radio and Bluetooth.
+- **Volume knob**: the knob's full travel maps linearly in dB onto a configurable range (-80 to -38 dB by default) on the card's hardware mixer. It works for radio and Bluetooth.
 - **Standby**: the Power and DAB positions stop all playback.
 - **Startup sound**: a sound plays when the service starts.
 
@@ -17,7 +17,7 @@ A small Python 3 service (`retropi`) reads the controls and drives MPD, the soun
 | Part | Purpose |
 | --- | --- |
 | Raspberry Pi 3B | Main computer (Wi-Fi and Bluetooth share one 2.4 GHz chip) |
-| HiFiBerry Amp2 | DAC and stereo amplifier that drives the radio's speakers |
+| HiFiBerry Amp+ | Stereo amplifier (TI TAS5713, I²S input) that drives the radio's speakers |
 | MCP3008 | 10-bit ADC for reading the potentiometers |
 | 2× linear potentiometer (10 kΩ) | Station dial and volume knob |
 | Selector switch | Power, Internet radio, DAB, Bluetooth |
@@ -42,7 +42,7 @@ The MCP3008 runs over software SPI. CH0 is the volume knob, CH1 the station dial
 
 The inputs use the Pi's internal pull-ups. Power, DAB and Bluetooth pull their input to GND when selected. The internet radio input is pulled to GND in every other position and reads **high** when selected.
 
-The HiFiBerry Amp2 uses GPIO 2/3 (I²C) and 18–21 (I²S), so the pins above don't clash with it. All pins are set in `config.toml`.
+The HiFiBerry Amp+ uses GPIO 2/3 (I²C) and 18–21 (I²S), so the pins above don't clash with it. All pins are set in `config.toml`.
 
 ## Installation
 
@@ -69,7 +69,7 @@ The script:
 | Step | What it does |
 | --- | --- |
 | 1. Pre-checks | Stops unless it runs as root on Trixie; prints the board model |
-| 2. Boot config | Writes a marked block into `/boot/firmware/config.txt` that turns off onboard audio and loads the `hifiberry-dacplus` overlay (the driver ships with the kernel) |
+| 2. Boot config | Writes a marked block into `/boot/firmware/config.txt` that turns off onboard audio and loads the `hifiberry-amp` overlay (the driver ships with the kernel) |
 | 3. Packages | Installs MPD, BlueZ, BlueALSA, ALSA utilities and the Python libraries from apt |
 | 4. System files | Copies the files in `system/` to their targets (see below) |
 | 5. User | Adds `pi` to `gpio`, `audio`, `bluetooth`, `netdev` |
