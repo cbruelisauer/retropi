@@ -7,6 +7,11 @@ Wants=mpd.service bluetooth.service
 Type=simple
 User=pi
 WorkingDirectory=/opt/retropi
+# lgpio writes notification files to its working directory, and /opt/retropi
+# is not writable by pi. Without lgpio, gpiozero falls back to the sysfs pin
+# factory, which fails on current kernels; so require lgpio.
+RuntimeDirectory=retropi
+Environment=LG_WD=/run/retropi GPIOZERO_PIN_FACTORY=lgpio
 ExecStart=/opt/retropi/venv/bin/retropi --config /etc/retropi/config.toml
 Restart=on-failure
 RestartSec=5
