@@ -1,6 +1,6 @@
 import pytest
 
-from retropi.bluetooth import Bluetooth, BluetoothError
+from retropi.bluetooth import RETRY_S, Bluetooth, BluetoothError
 
 
 class FakeBackend:
@@ -11,11 +11,18 @@ class FakeBackend:
         self.visible = False
         self.phone_connected = False
         self.reconnects = 0
+        self.starts = 0
         self.fail = False
 
-    def attach(self, on_connected, may_pair):
+    def attach(self, on_connected, may_pair, on_bluez_restart):
         self.on_connected = on_connected
         self.may_pair = may_pair
+        self.on_bluez_restart = on_bluez_restart
+
+    def start(self):
+        if self.fail:
+            raise BluetoothError("bluetoothd not running")
+        self.starts += 1
 
     def power(self, on):
         if self.fail:
@@ -50,6 +57,11 @@ class FakeBackend:
             self.phone_connected = False
             self.on_connected(False)
 
+    def restart_bluez(self):
+        """bluetoothd restarted: the adapter is off and the agent is gone."""
+        self.powered = self.visible = self.phone_connected = False
+        self.on_bluez_restart()
+
 
 @pytest.fixture
 def backend():
@@ -61,9 +73,15 @@ def played():
     return []
 
 
+def make_bt(backend, played, clock):
+    bt = Bluetooth(backend, 120, played.append, "connect.wav", "disconnect.wav", clock=clock)
+    bt.start()  # as open_bluetooth() does
+    return bt
+
+
 @pytest.fixture
 def bt(backend, played, clock):
-    return Bluetooth(backend, 120, played.append, "connect.wav", "disconnect.wav", clock=clock)
+    return make_bt(backend, played, clock)
 
 
 def test_adapter_off_until_enabled(bt, backend):
@@ -135,3 +153,61 @@ def test_backend_errors_are_logged_not_raised(bt, backend, caplog):
     bt.enable()
     bt.disable()
     assert "bluetoothd not running" in caplog.text
+
+
+def test_bluez_missing_at_startup_is_retried_in_bluetooth_mode(backend, played, clock, caplog):
+    backend.fail = True
+    bt = make_bt(backend, played, clock)  # must not raise
+    bt.disable()
+    bt.enable()
+    assert not backend.powered
+    assert "bluetoothd not running" in caplog.text
+
+    backend.fail = False
+    clock.advance(RETRY_S - 1)
+    bt.tick()
+    assert not backend.powered
+    clock.advance(1)
+    bt.tick()
+    assert backend.starts == 1
+    assert backend.powered and backend.visible and bt.pairing_open()
+    assert backend.reconnects == 1
+
+
+def test_retry_after_window_closed_keeps_radio_hidden(backend, played, clock):
+    backend.fail = True
+    bt = make_bt(backend, played, clock)
+    bt.enable()
+    backend.fail = False
+    clock.advance(200)
+    bt.tick()
+    assert backend.powered and not backend.visible
+    assert not backend.connect(trusted=False)
+    assert backend.connect(trusted=True)
+
+
+def test_bluez_restart_in_bluetooth_mode_sets_up_again(bt, backend):
+    bt.enable()
+    backend.restart_bluez()
+    bt.tick()
+    assert backend.starts == 2  # agent registered with the new bluetoothd
+    assert backend.powered and backend.visible
+    assert backend.reconnects == 2
+
+
+def test_bluez_restart_while_off_waits_for_bluetooth_mode(bt, backend):
+    backend.restart_bluez()
+    bt.tick()
+    assert backend.starts == 1 and not backend.powered
+    bt.enable()
+    assert backend.starts == 2 and backend.powered
+
+
+def test_no_retry_after_leaving_bluetooth_mode(bt, backend, clock):
+    backend.fail = True
+    bt.enable()
+    bt.disable()
+    backend.fail = False
+    clock.advance(RETRY_S)
+    bt.tick()
+    assert not backend.powered

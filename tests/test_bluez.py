@@ -8,7 +8,7 @@ dbus_next = pytest.importorskip("dbus_next")
 
 from dbus_next import DBusError, Message, MessageType, Variant
 
-from retropi.bluetooth import DEVICE, PROPERTIES, BluezBackend, _make_agent
+from retropi.bluetooth import DBUS, DEVICE, PROPERTIES, BluetoothError, BluezBackend, _make_agent
 
 
 @pytest.fixture
@@ -63,6 +63,59 @@ def test_connected_signal_reaches_callback(backend):
     backend._on_message(signal_msg("/org/bluez/hci0", "org.bluez.Adapter1", {"Powered": Variant("b", False)}))
     backend._on_message(signal_msg("/org/bluez/hci0/dev_AA", DEVICE, {"Connected": Variant("b", False)}))
     assert seen == [True, False]
+
+
+def name_owner_msg(name, new_owner, sender=DBUS):
+    return Message(
+        message_type=MessageType.SIGNAL,
+        sender=sender,
+        path="/org/freedesktop/DBus",
+        interface=DBUS,
+        member="NameOwnerChanged",
+        signature="sss",
+        body=[name, ":1.5", new_owner],
+    )
+
+
+def test_bluez_restart_reaches_callback(backend):
+    restarts = []
+    backend.attach(on_connected=lambda c: None, may_pair=lambda: False, on_bluez_restart=lambda: restarts.append(1))
+    backend._on_message(name_owner_msg("org.bluez", ""))
+    backend._on_message(name_owner_msg("org.bluez", ":1.9"))
+    backend._on_message(name_owner_msg("org.freedesktop.NetworkManager", ":1.9"))
+    backend._on_message(name_owner_msg("org.bluez", ":1.9", sender=":1.42"))  # not from the bus daemon
+    assert len(restarts) == 2
+
+
+def test_start_again_accepts_agent_already_registered(backend):
+    calls = []
+
+    async def fake_call(path, interface, member, signature="", body=()):
+        calls.append(member)
+        if member == "RegisterAgent":
+            raise DBusError("org.bluez.Error.AlreadyExists", "Already Exists")
+        return []
+
+    backend._bus = object()  # connected and set up by an earlier start()
+    backend._call = fake_call
+    try:
+        backend.start()
+    finally:
+        backend._bus = None
+    assert calls == ["RegisterAgent", "RequestDefaultAgent"]
+
+
+def test_start_errors_become_bluetooth_errors(backend):
+    async def fake_call(path, interface, member, signature="", body=()):
+        raise DBusError("org.freedesktop.DBus.Error.ServiceUnknown", "org.bluez was not provided")
+
+    backend._bus = object()
+    backend._call = fake_call
+    try:
+        with pytest.raises(BluetoothError, match="ServiceUnknown|not provided"):
+            backend.start()
+    finally:
+        backend._bus = None
 
 
 @pytest.fixture
