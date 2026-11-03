@@ -87,7 +87,7 @@ The script:
 | --- | --- | --- |
 | `asound.conf` | `/etc/asound.conf` | A shared `dmix` on the HiFiBerry card as the default device, so MPD, Bluetooth audio and the sounds can play at the same time |
 | `mpd.conf` | `/etc/mpd.conf` | MPD plays to that `dmix` with `mixer_type "none"`, so only the volume knob sets the level |
-| `bluetooth-main.conf` | `/etc/bluetooth/main.conf` | `AutoEnable=false` keeps the adapter off until the radio powers it |
+| `bluetooth-main.conf` | `/etc/bluetooth/main.conf` | `AutoEnable=false` keeps the adapter off until the radio powers it; `JustWorksRepairing = confirm` lets a phone that forgot the radio pair again during the pairing window |
 | `bluealsa-a2dp-sink.conf` | `bluealsa.service` drop-in | BlueALSA runs as an A2DP sink only |
 | `bluealsa-aplay-dmix.conf` | `bluealsa-aplay.service` drop-in | Phone audio plays to the shared `dmix` |
 | `50-retropi-wifi.rules` | `/etc/polkit-1/rules.d/` | Lets group `netdev` run `nmcli radio wifi on/off` |

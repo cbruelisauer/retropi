@@ -80,6 +80,9 @@ class Config:
     bluetooth: Bluetooth
 
 
+SOUND_KEYS = ("startup_sound", "connect_sound", "disconnect_sound")
+
+
 def load(path: Path) -> Config:
     try:
         with open(path, "rb") as f:
@@ -91,7 +94,13 @@ def load(path: Path) -> Config:
     cfg = _build(Config, data, "")
     if cfg.audio.volume_min_db >= cfg.audio.volume_max_db:
         raise ConfigError("audio.volume_min_db must be below audio.volume_max_db")
-    return cfg
+    # lgpio changes the working directory to LG_WD when it opens the pins, so
+    # relative sound paths are made absolute now, against the start directory.
+    audio = dataclasses.replace(
+        cfg.audio,
+        **{name: str(Path.cwd() / getattr(cfg.audio, name)) for name in SOUND_KEYS},
+    )
+    return dataclasses.replace(cfg, audio=audio)
 
 
 def _build(cls, data, prefix):
