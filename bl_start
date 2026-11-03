@@ -1,7 +1,0 @@
-#!/bin/bash
-bluetoothctl << EOF
-power on
-EOF
-bluetoothctl << EOF
-discoverable on
-EOF

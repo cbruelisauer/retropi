@@ -1,0 +1,15 @@
+[Unit]
+Description=RetroPi radio controller
+After=mpd.service bluetooth.service bluealsa.service NetworkManager.service sound.target
+Wants=mpd.service bluetooth.service
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/opt/retropi
+ExecStart=/opt/retropi/venv/bin/retropi --config /etc/retropi/config.toml
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
