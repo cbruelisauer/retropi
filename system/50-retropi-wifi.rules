@@ -1,0 +1,9 @@
+// /etc/polkit-1/rules.d/50-retropi-wifi.rules, installed by retropi.
+// Lets the radio (user pi, group netdev) switch the Wi-Fi radio on and off
+// with `nmcli radio wifi`.
+polkit.addRule(function (action, subject) {
+    if (action.id == "org.freedesktop.NetworkManager.enable-disable-wifi" &&
+        subject.isInGroup("netdev")) {
+        return polkit.Result.YES;
+    }
+});

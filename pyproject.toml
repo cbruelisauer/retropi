@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "retropi"
+version = "2.0.0"
+description = "Controller for a retro radio turned into an internet radio and Bluetooth speaker"
+readme = "README.md"
+requires-python = ">=3.11"
+# Runtime libraries come from Debian packages (python3-gpiozero,
+# python3-alsaaudio, python3-mpd, python3-dbus-next) through a venv with
+# --system-site-packages, so pip never builds them on the Pi.
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[project.scripts]
+retropi = "retropi.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint.per-file-ignores]
+# dbus-next reads D-Bus signatures ("o", "s", ...) from string annotations.
+"src/retropi/bluetooth.py" = ["F821", "F722"]

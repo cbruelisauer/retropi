@@ -1,0 +1,48 @@
+# retropi configuration. Installed to /etc/retropi/config.toml; edits there
+# survive updates. Relative paths are resolved against the service's working
+# directory (/opt/retropi on the Pi, the repo root when run from a checkout).
+
+[pins]
+power = 26
+radio = 13              # active high; pulled to GND in every other position
+dab = 12                # treated as standby
+bluetooth = 16
+selector_settle_ms = 100
+
+[leds]                  # reserved, not used yet
+power = 5
+status = 6
+
+[adc]                   # MCP3008, software SPI
+clk = 17
+miso = 23
+mosi = 24
+cs = 25
+volume_channel = 0
+station_channel = 1
+volume_tolerance = 5    # ADC counts the knob must move before it counts
+station_tolerance = 7
+
+[audio]
+card = "sndrpihifiberry"  # check with: aplay -l
+mixer = "Digital"       # check with: amixer scontrols
+volume_min_db = -45.0   # knob fully left; tune by ear
+volume_max_db = -10.0   # knob fully right; tune by ear
+startup_volume_db = -30.0
+startup_sound = "sounds/connect.wav"
+connect_sound = "sounds/connect.wav"
+disconnect_sound = "sounds/disconnect.wav"
+
+[mpd]
+host = "localhost"
+port = 6600
+playlist = "stations"
+
+[network]
+wifi_connect_timeout_s = 30   # then try anyway
+play_retry_s = 5              # how often a stopped or failed stream is restarted
+
+[bluetooth]
+name = "RetroPi"
+disable_wifi = true
+pairing_window_s = 120
