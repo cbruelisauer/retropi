@@ -46,3 +46,11 @@ play_retry_s = 5              # how often a stopped or failed stream is restarte
 name = "RetroPi"
 disable_wifi = true
 pairing_window_s = 120
+
+[tuning]                # static between stations; this table and each key are optional
+enabled = true
+station_gap = 0.15      # share of each station's band, around every border, that only plays static
+tune_settle_ms = 300    # how long the dial must rest on a station before it tunes in
+static_level_db = -6.0  # static level; tune by ear against the stations
+static_fade_ms = 300
+static_sound = "sounds/static.wav"  # 16-bit WAV, played in a loop; a real recording works too

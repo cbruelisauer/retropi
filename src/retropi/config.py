@@ -70,6 +70,18 @@ class Bluetooth:
 
 
 @dataclass(frozen=True)
+class Tuning:
+    """Static between stations. Optional in config.toml; these are the defaults."""
+
+    enabled: bool = True
+    station_gap: float = 0.15  # share of each band, around every border, that only plays static
+    tune_settle_ms: int = 300  # how long the dial must rest on a station before it tunes in
+    static_level_db: float = -6.0  # static level against the clip's own level
+    static_fade_ms: int = 300
+    static_sound: str = "sounds/static.wav"
+
+
+@dataclass(frozen=True)
 class Config:
     pins: Pins
     leds: Leds
@@ -78,6 +90,7 @@ class Config:
     mpd: Mpd
     network: Network
     bluetooth: Bluetooth
+    tuning: Tuning = dataclasses.field(default_factory=Tuning)
 
 
 SOUND_KEYS = ("startup_sound", "connect_sound", "disconnect_sound")
@@ -94,29 +107,33 @@ def load(path: Path) -> Config:
     cfg = _build(Config, data, "")
     if cfg.audio.volume_min_db >= cfg.audio.volume_max_db:
         raise ConfigError("audio.volume_min_db must be below audio.volume_max_db")
+    if not 0.0 <= cfg.tuning.station_gap < 1.0:
+        raise ConfigError("tuning.station_gap must be at least 0 and below 1")
     # lgpio changes the working directory to LG_WD when it opens the pins, so
     # relative sound paths are made absolute now, against the start directory.
     audio = dataclasses.replace(
         cfg.audio,
         **{name: str(Path.cwd() / getattr(cfg.audio, name)) for name in SOUND_KEYS},
     )
-    return dataclasses.replace(cfg, audio=audio)
+    tuning = dataclasses.replace(cfg.tuning, static_sound=str(Path.cwd() / cfg.tuning.static_sound))
+    return dataclasses.replace(cfg, audio=audio, tuning=tuning)
 
 
 def _build(cls, data, prefix):
     if not isinstance(data, dict):
         raise ConfigError(f"[{prefix}] must be a table")
-    fields = {f.name: f.type for f in dataclasses.fields(cls)}
+    fields = {f.name: f for f in dataclasses.fields(cls)}
     unknown = data.keys() - fields.keys()
     if unknown:
         names = ", ".join(sorted(_key(prefix, k) for k in unknown))
         raise ConfigError(f"unknown config key(s): {names}")
     values = {}
-    for name, typ in fields.items():
+    for name, field in fields.items():
         key = _key(prefix, name)
-        if name not in data:
+        if name in data:
+            values[name] = _check(field.type, data[name], key)
+        elif field.default is dataclasses.MISSING and field.default_factory is dataclasses.MISSING:
             raise ConfigError(f"missing config key: {key}")
-        values[name] = _check(typ, data[name], key)
     return cls(**values)
 
 
