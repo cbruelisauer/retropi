@@ -22,6 +22,8 @@ class FakeKnob:
     def __init__(self, value):
         self.value = value
         self.moved = None
+        self.nudged = False
+        self.moving = False
 
     def position(self):
         self.moved = None
@@ -29,10 +31,15 @@ class FakeKnob:
 
     def changed(self):
         moved, self.moved = self.moved, None
+        self.moving, self.nudged = self.nudged or moved is not None, False
         return moved
 
     def turn(self, value):
         self.value = self.moved = value
+
+    def nudge(self):
+        """Move the knob past its tolerance without leaving the band."""
+        self.nudged = True
 
 
 class FakeMixer:
@@ -373,6 +380,18 @@ def test_dial_settles_before_tuning(tuner, calls, clock):
     assert [c for c in calls if c[0] == "radio.play"] == [("radio.play", 6)]
     run_for(tuner, clock, 0.5)
     assert calls[-1] == ("static.off",)
+
+
+def test_turning_inside_a_band_delays_tuning(tuner, calls, clock):
+    tuned_in(tuner, calls, clock)
+    tuner.station_knob.turn(4)
+    run_for(tuner, clock, 0.2)
+    for _ in range(3):  # slow sweep: still turning through station 4's band
+        tuner.station_knob.nudge()
+        run_for(tuner, clock, 0.2)
+    assert not any(c[0] == "radio.play" for c in calls)
+    run_for(tuner, clock, 0.3)
+    assert [c for c in calls if c[0] == "radio.play"] == [("radio.play", 4)]
 
 
 def test_gap_plays_only_static(tuner, calls, clock):

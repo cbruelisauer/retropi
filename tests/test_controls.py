@@ -50,6 +50,17 @@ def test_knob_first_changed_without_position_reports_value():
     assert knob.changed() == 300
 
 
+def test_knob_reports_moving_past_tolerance():
+    adc = FakeAdc(100)
+    knob = Knob(adc, lambda raw: raw // 100, tolerance=5)
+    knob.position()
+    adc.raw = 103
+    assert knob.changed() is None and not knob.moving
+    adc.raw = 150
+    assert knob.changed() is None and knob.moving  # moved, but still in the same band
+    assert knob.changed() is None and not knob.moving
+
+
 def test_knob_same_mapped_value_returns_none():
     adc = FakeAdc(0)
     knob = Knob(adc, lambda raw: station_index(raw, 10), tolerance=7)

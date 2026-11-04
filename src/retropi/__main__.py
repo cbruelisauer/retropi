@@ -124,6 +124,9 @@ class Controller:
         s = self.station_knob.changed()
         if s is not None:
             self._tune(s, now, settle=True)
+        elif self.tune_at is not None and self.station_knob.moving:
+            # Still turning inside the band: the dial has not come to rest yet.
+            self.tune_at = now + self.tune_settle_s
         if self.tune_at is not None:
             if now >= self.tune_at:
                 self.tune_at = None

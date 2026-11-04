@@ -60,6 +60,8 @@ def read_clip(path: str | Path, level_db: float) -> tuple[array, int, int]:
             raise ValueError(f"{path}: static clip must be 16-bit PCM")
         channels, rate = w.getnchannels(), w.getframerate()
         samples = array("h", w.readframes(w.getnframes()))
+    if len(samples) < channels:
+        raise ValueError(f"{path}: static clip is empty")
     factor = 10 ** (level_db / 20)
     scaled = array("h", (max(-32768, min(32767, int(s * factor))) for s in samples))
     return scaled, channels, rate

@@ -61,6 +61,7 @@ class Knob:
         self._tolerance = tolerance
         self._baseline = None
         self._value = None
+        self.moving = False  # whether the last changed() saw the knob move past the tolerance
 
     def position(self):
         """Return the current value and make it the baseline for ``changed()``."""
@@ -73,7 +74,9 @@ class Knob:
         """Return the new value if the knob moved past the tolerance, else None."""
         raw = self._read_raw()
         if self._baseline is not None and abs(raw - self._baseline) <= self._tolerance:
+            self.moving = False
             return None
+        self.moving = True
         self._baseline = raw
         value = self._mapping(raw)
         if value == self._value:

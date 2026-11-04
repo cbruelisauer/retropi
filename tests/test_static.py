@@ -59,6 +59,16 @@ def test_read_clip_rejects_8_bit(tmp_path):
         read_clip(path, 0.0)
 
 
+def test_read_clip_rejects_empty_clip(tmp_path):
+    path = tmp_path / "clip.wav"
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(2)
+        w.setsampwidth(2)
+        w.setframerate(8000)
+    with pytest.raises(ValueError, match="empty"):
+        read_clip(path, 0.0)
+
+
 def test_shipped_clip_loads():
     data, channels, rate = read_clip(STATIC_WAV, -6.0)
     assert channels == 2
