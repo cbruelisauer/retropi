@@ -50,6 +50,17 @@ def test_knob_first_changed_without_position_reports_value():
     assert knob.changed() == 300
 
 
+def test_knob_reports_moving_past_tolerance():
+    adc = FakeAdc(100)
+    knob = Knob(adc, lambda raw: raw // 100, tolerance=5)
+    knob.position()
+    adc.raw = 103
+    assert knob.changed() is None and not knob.moving
+    adc.raw = 150
+    assert knob.changed() is None and knob.moving  # moved, but still in the same band
+    assert knob.changed() is None and not knob.moving
+
+
 def test_knob_same_mapped_value_returns_none():
     adc = FakeAdc(0)
     knob = Knob(adc, lambda raw: station_index(raw, 10), tolerance=7)
@@ -118,3 +129,34 @@ def test_dab_is_standby(inputs, clock):
     selector.read()
     clock.advance(0.1)
     assert selector.read() is Mode.STANDBY
+
+
+def test_station_gap_between_bands():
+    from retropi.controls import GAP
+
+    # 4 stations: bands of 256 counts, a 20 % gap is 25.6 counts around each border.
+    assert station_index(0, 4, 0.2) == 0
+    assert station_index(230, 4, 0.2) == 0
+    assert station_index(231, 4, 0.2) is GAP
+    assert station_index(281, 4, 0.2) is GAP
+    assert station_index(282, 4, 0.2) == 1
+    assert station_index(1023, 4, 0.2) == 3  # no gap at the ends of the dial
+
+
+def test_station_gap_share_of_dial():
+    from retropi.controls import GAP
+
+    gaps = sum(station_index(raw, 10, 0.15) is GAP for raw in range(1024))
+    assert gaps == pytest.approx(9 * 0.15 * 102.4, abs=9)
+
+
+def test_knob_reports_entering_and_leaving_gap():
+    from retropi.controls import GAP
+
+    adc = FakeAdc(100)
+    knob = Knob(adc, lambda raw: station_index(raw, 4, 0.2), tolerance=7)
+    assert knob.position() == 0
+    adc.raw = 256
+    assert knob.changed() is GAP
+    adc.raw = 300
+    assert knob.changed() == 1

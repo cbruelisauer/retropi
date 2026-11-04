@@ -60,6 +60,23 @@ class Radio:
             return False
         return True
 
+    def audible(self) -> bool:
+        """True once MPD is playing the stream, not only connecting to it.
+
+        MPD reports "play" while it still opens and buffers a stream; the
+        elapsed time starts counting only when the audio comes out.
+        """
+        try:
+            status = self._call("status")
+        except self._command_errors:
+            return False
+        if status.get("state") != "play" or "error" in status:
+            return False
+        try:
+            return float(status.get("elapsed", 0)) > 0
+        except ValueError:
+            return False
+
     def stop(self) -> None:
         try:
             self._call("stop")

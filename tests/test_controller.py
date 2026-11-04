@@ -3,7 +3,7 @@ import signal
 import pytest
 
 from retropi.__main__ import Controller
-from retropi.controls import Mode
+from retropi.controls import GAP, Mode
 
 
 class Calls(list):
@@ -22,6 +22,8 @@ class FakeKnob:
     def __init__(self, value):
         self.value = value
         self.moved = None
+        self.nudged = False
+        self.moving = False
 
     def position(self):
         self.moved = None
@@ -29,10 +31,15 @@ class FakeKnob:
 
     def changed(self):
         moved, self.moved = self.moved, None
+        self.moving, self.nudged = self.nudged or moved is not None, False
         return moved
 
     def turn(self, value):
         self.value = self.moved = value
+
+    def nudge(self):
+        """Move the knob past its tolerance without leaving the band."""
+        self.nudged = True
 
 
 class FakeMixer:
@@ -62,6 +69,11 @@ class FakeRadio:
 
     def playing(self):
         return self.is_playing
+
+    def audible(self):
+        return self.is_playing and self.is_audible
+
+    is_audible = True  # False: MPD still connects to a stream that plays
 
     def stop(self):
         self.calls.append(("radio.stop",))
@@ -283,3 +295,136 @@ def test_crash_still_shuts_down(ctl, calls):
     with pytest.raises(ZeroDivisionError):
         ctl.run(sleep=lambda s: None)
     assert calls == [("mixer.mute",), ("radio.stop",), ("bt.disable",), ("wifi.on",)]
+
+
+# --- Tuning static ---------------------------------------------------------
+
+
+class FakeStatic:
+    def __init__(self, calls):
+        self.calls = calls
+
+    def on(self):
+        self.calls.append(("static.on",))
+
+    def off(self):
+        self.calls.append(("static.off",))
+
+    def stop(self):
+        self.calls.append(("static.stop",))
+
+
+@pytest.fixture
+def tuner(calls, clock):
+    return Controller(
+        FakeSelector(),
+        FakeKnob(-20.0),
+        FakeKnob(3),
+        FakeMixer(calls),
+        FakeRadio(calls),
+        FakeBluetooth(calls),
+        FakeWifi(calls),
+        disable_wifi=True,
+        wifi_connect_timeout_s=30,
+        play_retry_s=5,
+        static=FakeStatic(calls),
+        tune_settle_s=0.3,
+        clock=clock,
+    )
+
+
+def run_for(ctl, clock, seconds, dt=0.05):
+    for _ in range(round(seconds / dt)):
+        clock.advance(dt)
+        ctl.step()
+
+
+def tuned_in(ctl, calls, clock):
+    """Switch to radio and wait until station 3 is audible and the static is gone."""
+    switch(ctl, calls, Mode.RADIO)
+    run_for(ctl, clock, 1)
+    assert calls[-1] == ("static.off",)
+    calls.clear()
+
+
+def test_static_until_stream_is_audible(tuner, calls, clock):
+    tuner.radio.is_audible = False
+    assert switch(tuner, calls, Mode.RADIO) == [("static.on",), ("radio.play", 3)]
+    run_for(tuner, clock, 2)
+    assert ("static.off",) not in calls
+    tuner.radio.is_audible = True
+    run_for(tuner, clock, 0.5)
+    assert calls[-1] == ("static.off",)
+
+
+def test_static_while_waiting_for_wifi(tuner, calls, clock):
+    tuner.wifi.is_connected = False
+    assert switch(tuner, calls, Mode.RADIO) == [("static.on",)]
+    tuner.wifi.is_connected = True
+    calls.clear()
+    run_for(tuner, clock, 2)  # next Wi-Fi poll after 1 s, audible 0.5 s later
+    assert calls == [("radio.play", 3), ("static.off",)]  # the static was on since entering radio
+
+
+def test_dial_settles_before_tuning(tuner, calls, clock):
+    tuned_in(tuner, calls, clock)
+    tuner.station_knob.turn(4)
+    clock.advance(0.05)
+    tuner.step()
+    assert calls == [("radio.stop",), ("static.on",)]
+    for station in (5, 6):  # still turning: no stream is started
+        tuner.station_knob.turn(station)
+        run_for(tuner, clock, 0.2)
+    assert not any(c[0] == "radio.play" for c in calls)
+    run_for(tuner, clock, 0.3)
+    assert [c for c in calls if c[0] == "radio.play"] == [("radio.play", 6)]
+    run_for(tuner, clock, 0.5)
+    assert calls[-1] == ("static.off",)
+
+
+def test_turning_inside_a_band_delays_tuning(tuner, calls, clock):
+    tuned_in(tuner, calls, clock)
+    tuner.station_knob.turn(4)
+    run_for(tuner, clock, 0.2)
+    for _ in range(3):  # slow sweep: still turning through station 4's band
+        tuner.station_knob.nudge()
+        run_for(tuner, clock, 0.2)
+    assert not any(c[0] == "radio.play" for c in calls)
+    run_for(tuner, clock, 0.3)
+    assert [c for c in calls if c[0] == "radio.play"] == [("radio.play", 4)]
+
+
+def test_gap_plays_only_static(tuner, calls, clock):
+    tuned_in(tuner, calls, clock)
+    tuner.station_knob.turn(GAP)
+    run_for(tuner, clock, 10)
+    assert calls == [("radio.stop",), ("static.on",)]
+    tuner.station_knob.turn(4)
+    run_for(tuner, clock, 1)
+    assert calls[2:] == [("radio.play", 4), ("static.off",)]
+
+
+def test_dropout_brings_static_back(tuner, calls, clock):
+    tuned_in(tuner, calls, clock)
+    tuner.radio.is_playing = False
+    run_for(tuner, clock, 5)
+    assert calls[:2] == [("radio.play", 3), ("static.on",)]
+
+
+def test_slow_stream_is_not_restarted_while_connecting(tuner, calls, clock):
+    tuner.radio.is_audible = False  # MPD plays, but no audio yet
+    switch(tuner, calls, Mode.RADIO)
+    run_for(tuner, clock, 12)
+    assert calls.count(("radio.play", 3)) == 1
+
+
+def test_leaving_radio_cuts_static(tuner, calls, clock):
+    tuner.radio.is_audible = False
+    switch(tuner, calls, Mode.RADIO)
+    assert switch(tuner, calls, Mode.STANDBY) == [("static.stop",), ("radio.stop",)]
+
+
+def test_shutdown_cuts_static(tuner, calls):
+    calls.clear()
+    tuner.shutdown()
+    assert calls[0] == ("static.stop",)

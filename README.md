@@ -7,6 +7,7 @@ A small Python 3 service (`retropi`) reads the controls and drives MPD, the soun
 ## Features
 
 - **Internet radio**: streams the stations in `stations.m3u` through MPD. The station dial is split into equal bands, one per station.
+- **Tuning static**: like an old receiver, the radio hisses while the dial turns, between two stations, while Wi-Fi and the stream connect and when a stream drops. A station tunes in once the dial rests on it, and the static fades out when its audio starts.
 - **Bluetooth speaker**: BlueALSA makes the Pi an A2DP sink. The Bluetooth adapter is powered only while the selector is on Bluetooth, so in every other position no phone can see or connect to the radio.
 - **Volume knob**: the knob's full travel maps linearly in dB onto a configurable range (-80 to -38 dB by default) on the card's hardware mixer. It works for radio and Bluetooth.
 - **Standby**: the Power and DAB positions stop all playback.
@@ -95,7 +96,7 @@ The script:
 
 ## Configuration
 
-All settings live in `/etc/retropi/config.toml` (the repo's [`config.toml`](config.toml) is the template): pins, ADC channels, knob tolerances, mixer name, volume range, MPD connection, Wi-Fi timeouts and Bluetooth options. Missing, unknown or mistyped keys stop the service at startup with a message in the journal.
+All settings live in `/etc/retropi/config.toml` (the repo's [`config.toml`](config.toml) is the template): pins, ADC channels, knob tolerances, mixer name, volume range, MPD connection, Wi-Fi timeouts and Bluetooth options. Missing, unknown or mistyped keys stop the service at startup with a message in the journal. The `[tuning]` table is the exception: it and each of its keys are optional, so an existing config keeps working after an update.
 
 Check the mixer name after the first boot and set `audio.mixer` to match:
 
@@ -111,11 +112,24 @@ sudo systemctl restart retropi
 
 To change stations, edit `stations.m3u` and re-run the install script. Positions on the dial follow the order of the file.
 
+### Tuning static
+
+| Key in `[tuning]` | Default | Meaning |
+| --- | --- | --- |
+| `enabled` | `true` | `false` brings back the plain dial: equal bands, no gaps, no static |
+| `station_gap` | `0.15` | Share of each station's band, centred on every border between two stations, that plays only static. The two ends of the dial have no gap |
+| `tune_settle_ms` | `300` | How long the dial must rest on a station before its stream starts, so sweeping the dial does not open every stream on the way |
+| `static_level_db` | `-6.0` | Level of the static; tune it by ear against the stations. The volume knob sets both |
+| `static_fade_ms` | `300` | Fade-in and fade-out time |
+| `static_sound` | `sounds/static.wav` | A 16-bit WAV that is played in a loop |
+
+The default clip is generated noise, band-limited like an AM receiver, with some crackle. `python tools/make_static.py` renders it again. A recording of a real radio between stations works too: save it as a 16-bit WAV that loops cleanly, point `static_sound` at it and restart the service.
+
 ## Usage
 
 | Selector | What happens |
 | --- | --- |
-| **Internet radio** | Waits for Wi-Fi, then plays the station the dial points at. Station dial and volume knob are active. |
+| **Internet radio** | Plays static while it waits for Wi-Fi, then plays the station the dial points at. Station dial and volume knob are active. |
 | **Bluetooth** | Turns Wi-Fi off, powers the Bluetooth adapter and opens the pairing window. Volume knob is active. |
 | **Power** / **DAB** | Standby: stops playback and turns Bluetooth off. |
 
@@ -154,9 +168,12 @@ The code is in `src/retropi/`, one module per concern:
 | `controls.py` | Debounced selector, potentiometer knobs with hysteresis |
 | `mixer.py` | Sets the card's mixer in dB |
 | `sounds.py` | Plays the sound effects with `aplay` |
+| `static.py` | Loops the tuning static with fades on a background thread (pyalsaaudio) |
 | `radio.py` | MPD playlist and playback, with reconnect |
 | `bluetooth.py` | Adapter power, pairing window and agent, connect sounds (BlueZ over D-Bus) |
 | `network.py` | Wi-Fi on/off and "connected?" through `nmcli` |
+
+`tools/make_static.py` renders the default static clip.
 
 The unit tests use fakes for GPIO, MPD, ALSA and D-Bus, so they run on any machine with Python 3.11+:
 

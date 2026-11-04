@@ -97,3 +97,29 @@ def test_sound_paths_are_absolute(tmp_path, monkeypatch):
     cfg = config.load(path)
     assert cfg.audio.connect_sound == str(tmp_path / "sounds/connect.wav")
     assert cfg.audio.disconnect_sound == "/x/bye.wav"
+
+
+def test_tuning_is_optional(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    text = re.sub(r"\[tuning\][^\[]*", "", REPO_CONFIG.read_text(encoding="utf-8"))
+    cfg = config.load(write(tmp_path, text))
+    assert cfg.tuning == config.Tuning(static_sound=str(tmp_path / "sounds/static.wav"))
+
+
+def test_tuning_keys_are_optional(tmp_path):
+    path = repo_config_with(tmp_path, "station_gap = 0.15", "")
+    cfg = config.load(path)
+    assert cfg.tuning.station_gap == config.Tuning.station_gap
+    assert cfg.tuning.enabled is True
+
+
+def test_tuning_gap_range(tmp_path):
+    path = repo_config_with(tmp_path, "station_gap = 0.15", "station_gap = 1.0")
+    with pytest.raises(config.ConfigError, match="station_gap"):
+        config.load(path)
+
+
+def test_tuning_unknown_key(tmp_path):
+    path = repo_config_with(tmp_path, "[tuning]", "[tuning]\nstatic_levl_db = 1.0")
+    with pytest.raises(config.ConfigError, match="tuning.static_levl_db"):
+        config.load(path)

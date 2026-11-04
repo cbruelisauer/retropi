@@ -61,6 +61,7 @@ class Knob:
         self._tolerance = tolerance
         self._baseline = None
         self._value = None
+        self.moving = False  # whether the last changed() saw the knob move past the tolerance
 
     def position(self):
         """Return the current value and make it the baseline for ``changed()``."""
@@ -73,7 +74,9 @@ class Knob:
         """Return the new value if the knob moved past the tolerance, else None."""
         raw = self._read_raw()
         if self._baseline is not None and abs(raw - self._baseline) <= self._tolerance:
+            self.moving = False
             return None
+        self.moving = True
         self._baseline = raw
         value = self._mapping(raw)
         if value == self._value:
@@ -85,9 +88,29 @@ class Knob:
 ADC_MAX = 1023
 
 
-def station_index(raw: int, count: int) -> int:
-    """Split the dial into ``count`` equal bands; returns a 0-based index."""
-    return min(raw * count // (ADC_MAX + 1), count - 1)
+class _Gap:
+    def __repr__(self):
+        return "GAP"
+
+
+GAP = _Gap()  # the station dial is between two stations
+
+
+def station_index(raw: int, count: int, gap: float = 0.0):
+    """Split the dial into ``count`` equal bands; returns a 0-based index.
+
+    ``gap`` is the share of a band, centred on each border between two
+    stations, that belongs to no station: there it returns ``GAP``. The two
+    ends of the dial have no gap.
+    """
+    raw = max(0, min(raw, ADC_MAX))
+    index = min(raw * count // (ADC_MAX + 1), count - 1)
+    width = (ADC_MAX + 1) / count
+    half_gap = gap * width / 2
+    offset = raw - index * width
+    if (index > 0 and offset < half_gap) or (index < count - 1 and offset >= width - half_gap):
+        return GAP
+    return index
 
 
 def volume_db(raw: int, min_db: float, max_db: float) -> float:
@@ -96,7 +119,7 @@ def volume_db(raw: int, min_db: float, max_db: float) -> float:
     return round(min_db + (max_db - min_db) * raw / ADC_MAX, 1)
 
 
-def open_hardware(cfg, station_count: int):
+def open_hardware(cfg, station_count: int, station_gap: float = 0.0):
     """Create the selector and knobs on the real GPIO pins and MCP3008."""
     from gpiozero import MCP3008, DigitalInputDevice
 
@@ -128,7 +151,7 @@ def open_hardware(cfg, station_count: int):
     )
     station_knob = Knob(
         lambda: station_adc.raw_value,
-        lambda raw: station_index(raw, station_count),
+        lambda raw: station_index(raw, station_count, station_gap),
         adc.station_tolerance,
     )
     return selector, volume_knob, station_knob
