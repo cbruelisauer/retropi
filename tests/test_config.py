@@ -89,3 +89,11 @@ def test_main_reports_config_error(tmp_path, capsys):
 
     assert main(["--config", str(tmp_path / "nope.toml")]) == 2
     assert "config error" in capsys.readouterr().err
+
+
+def test_sound_paths_are_absolute(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    path = repo_config_with(tmp_path, 'disconnect_sound = "sounds/disconnect.wav"', 'disconnect_sound = "/x/bye.wav"')
+    cfg = config.load(path)
+    assert cfg.audio.connect_sound == str(tmp_path / "sounds/connect.wav")
+    assert cfg.audio.disconnect_sound == "/x/bye.wav"
