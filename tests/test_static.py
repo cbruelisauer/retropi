@@ -1,4 +1,3 @@
-import threading
 import time
 import wave
 from array import array
@@ -6,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from retropi import static as static_module
 from retropi.static import Loop, Static, read_clip
 
 STATIC_WAV = Path(__file__).parent.parent / "sounds" / "static.wav"
@@ -69,13 +69,17 @@ class FakePcm:
     def __init__(self, log):
         self.log = log
         self.closed = False
+        self.finished = None  # "drain" or "drop", whichever ran before close()
 
     def write(self, chunk):
         self.log.append(max(abs(s) for s in samples(chunk)))
         time.sleep(0.001)
 
+    def drain(self):
+        self.finished = "drain"
+
     def drop(self):
-        pass
+        self.finished = "drop"
 
     def close(self):
         self.closed = True
@@ -126,17 +130,59 @@ def test_static_stop_cuts_at_once(player):
     assert len(log) == written
 
 
-def test_static_gives_up_on_pcm_error():
-    attempts = threading.Event()
+def test_static_off_drains_the_fade_out(player):
+    static, log, pcms = player
+    static.on()
+    assert wait_for(lambda: log and log[-1] == 1000)
+    static.off()
+    assert wait_for(lambda: pcms[-1].closed)
+    assert pcms[-1].finished == "drain"  # the buffered end of the fade still plays
+
+
+def test_static_stop_drops_the_buffer(player):
+    static, log, pcms = player
+    static.on()
+    assert wait_for(lambda: len(log) >= 2)
+    static.stop()
+    assert wait_for(lambda: pcms[-1].closed)
+    assert pcms[-1].finished == "drop"
+
+
+def test_static_retries_after_pcm_error(monkeypatch):
+    monkeypatch.setattr(static_module, "OPEN_RETRY_S", 0.01)
+    log, attempts = [], []
+
+    def flaky():
+        attempts.append(1)
+        if len(attempts) < 3:
+            raise OSError("device busy")
+        return FakePcm(log)
+
+    static = Static(Loop(array("h", [1000]), channels=1, fade_frames=4), flaky)
+    try:
+        static.on()  # once, as the controller does
+        assert wait_for(lambda: log)
+        assert len(attempts) == 3
+    finally:
+        static.close()
+
+
+def test_static_off_ends_retrying(monkeypatch):
+    monkeypatch.setattr(static_module, "OPEN_RETRY_S", 0.01)
+    attempts = []
 
     def broken():
-        attempts.set()
+        attempts.append(1)
         raise OSError("no such device")
 
     static = Static(Loop(array("h", [1000]), channels=1, fade_frames=4), broken)
     try:
         static.on()
-        assert attempts.wait(1)
-        static.on()  # a later on() tries again
+        assert wait_for(lambda: len(attempts) >= 2)
+        static.off()
+        time.sleep(0.05)
+        tried = len(attempts)
+        time.sleep(0.05)
+        assert len(attempts) == tried
     finally:
         static.close()
